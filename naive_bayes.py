@@ -7,26 +7,28 @@ from nltk.stem.porter import PorterStemmer
 from nltk.stem.snowball import SnowballStemmer
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
 
-''' Tokenizer Classes '''
+def clean_lyrics(lyrics):
+    '''
+    Input: A string of lyrics
+    Output: Returns a string of lyrics that has been lowered, stemmed, and stripped of punctuation
+    '''
+    #creating a stemmed object
+    ps = PorterStemmer()
+    # splitting the lyrics and
+    lyrics_split = lyrics.lower().split()
+    lyrics_split = [ps.stem(word.strip(punctuation)) for word in lyrics_split]
+    joined_lyrics = ' '.join(lyrics_split)
+    return joined_lyrics
 
-class SnowballStemTokenizer(object):
-    def __init__(self):
-        self.ss = SnowballStemmer('english')
-    def __call__(self, doc):
-        return [self.ss.stem(t) for t in word_tokenize(doc)]
 
-class PorterStemTokenizer(object):
-    def __init__(self):
-        self.ps = PorterStemmer()
-    def __call__(self, doc):
-        return [self.ps.stem(t) for t in word_tokenize(doc)]
-
-
-def top_words(lyrics):
+def top_words(lyrics, num=7):
     '''
     Input: Song lyrics
-    Output: Percentage frequency of 7 most common word
+    Output: Percentage frequency of top x number of word
     '''
     #split the lyrics into a list
     lyrics = lyrics.lower().split()
@@ -36,9 +38,24 @@ def top_words(lyrics):
     counter_sum = float(sum(counter.values()))
     for key in counter.iterkeys():
         counter[key] /= counter_sum
-    highest_freq_words = counter.most_common(7)
+    highest_freq_words = counter.most_common(num)
     freq_sum = sum([word[1] for word in highest_freq_words])
     return freq_sum
+
+def rating(lyrics):
+    '''
+    Input: A stemmed lyrics
+    Return: Frequncy of wor
+    '''
+    check_word = set(['gun', 'bullet', 'murder', 'death', 'cop', 'popo', 'weed', 'cocaine', 'heroin', 'blunt', 'clip', 'punk',
+                    'snitch', 'brutality', 'methadone', 'amphetamines', 'ecstacy', 'marijuana', 'crack'])
+    counter = Counter(lyrics.split())
+    counter_sum = float(sum(counter.values()))
+    frequency = 0
+    # looping through the set of word to check for and add their occurances
+    for word in check_word:
+        frequency += counter[word]
+    return frequency/counter_sum
 
 
 def combined_txt_file(file_list):
@@ -55,21 +72,25 @@ def combined_txt_file(file_list):
     mask = ~ (combined['full_lyrics'].isnull())
     clean  = combined.ix[mask]
 
+    clean['full_lyrics'] = clean['full_lyrics'].apply(clean_lyrics)
+
     #add feature_1 - number of unique words
     clean['Num_words'] = clean['full_lyrics'].apply(lambda x: len(set(x.lower().split())))
 
     #add feature_2 - number of repetitions
     clean['Top_7_word_freq'] = clean['full_lyrics'].apply(top_words)
 
-    #add feature_3 - count of gangsta terms
+    #add feature_3 - count of gangsta terms. Apply a count that determines the frequncy of these words as a percentage of the doucment
+    clean['gangsta_rating'] = clean['full_lyrics'].apply(ratings)
+
     return clean
 
 def create_labeled_dataframe(txt_file):
     labels = pd.read_csv(txt_file, delimiter='|')
-    labels['classes'] = labels['classification'].apply(binary)
+    labels['classes'] = labels['classification'].apply(_binary)
     return labels
 
-def binary(string):
+def _binary(string):
     '''
     Input: A string
     Output: An int ditating which class
@@ -81,12 +102,13 @@ def binary(string):
     else:
         return 3
 
-def test_train_split(df, hold_out_per=.8):
+def _cross_val_split(df, hold_out_per=.8):
     '''
     Input: A dataframe, and a percentage of songs to hold out
     Output: a
     '''
-    features = ['full_lyrics', 'Num_words', 'Top_7_word_freq']
+    #columns to return - if add additional features here
+    features = ['full_lyrics', 'Num_words', 'Top_7_word_freq', gangsta_rating]
     #get the max id
     max_id = max(df.artist_id.unique())
     # to hold out
@@ -102,56 +124,64 @@ def test_train_split(df, hold_out_per=.8):
     test_y = df.loc[~mask,'classes']
     return train_X, train_y, test_X, test_y
 
-def cross_validation(df, k=3):
+def cross_validation(df, classifier_list, k=3):
     '''
     Input: A pandas dataframe, your X matrix
     Output: None, prints out score for the cross validations
     '''
     # this loop is to do cross-fold validations
-    features = ['Num_words', 'Top_7_word_freq']
+    features = ['Num_words', 'Top_7_word_freq', 'gangsta_rating']
     for _ in range(k):
-
         # # do a tfidf transformer
-        train_X, train_y, test_X, test_y = test_train_split(df)
+        #perfrom a test train split to cross validate
+        train_X, train_y, test_X, test_y = _cross_val_split(df)
 
-        #vectorize only the lyrics
-        vectorizer = TfidfVectorizer(max_features=10000)
-        train_vector = vectorizer.fit_transform(train_X['full_lyrics'])
-        test_vector = vectorizer.transform(test_X['full_lyrics'])
+        # #vectorize only the lyrics
+        # vectorizer = TfidfVectorizer(max_features=10000)
+        # train_vector = vectorizer.fit_transform(train_X['full_lyrics'])
+        # test_vector = vectorizer.transform(test_X['full_lyrics'])
 
-        #combining the train vector and feature_extractions
-        train = pd.DataFrame(train_vector.toarray())
+        # #combining the train vector to array to add them together
+        # train = pd.DataFrame(train_vector.toarray())
+        # test = pd.DataFrame(test_vector.toarray())
+
+
+        #tokenize the results
+        cv = CountVectorizer()
+        count_vector = cv.fit_transform(train_X['full_lyrics'])
+        test_vector = cv.transform(test_X['full_lyrics'])
+
+        train = pd.DataFrame(count_vector.toarray())
         test = pd.DataFrame(test_vector.toarray())
 
-        #reset index to match them all up
-        train.reset_index(inplace=True)
-        test.reset_index(inplace=True)
-        train_X.reset_index(inplace=True)
-        test_X.reset_index(inplace=True)
-                        # train_y.reset_index(inplace=True)
-                # test_y.reset_index(inplace=True)
 
-                #combining the tfidf with the features
+        #
+        # #reset index to match them all up
+        # train.reset_index(inplace=True)
+        # test.reset_index(inplace=True)
+        # train_X.reset_index(inplace=True)
+        # test_X.reset_index(inplace=True)
+        #combining the tfidf with the features
         combine_train_X = pd.merge(train, train_X[features], left_index=True, right_index=True, how='outer')
         combine_test_X = pd.merge(test, test_X[features], left_index=True, right_index=True, how='outer')
         combine_train_X = combine_train_X.drop('index', 1)
         combine_test_X = combine_test_X.drop('index', 1)
 
-        #creating a model
-        model = MultinomialNB()
-        model.fit(combine_train_X, train_y)
-        predicted = model.predict(combine_test_X)
-        confusion_matrix(test_y, predicted)
-        print confusion_matrix(test_y, predicted)
-        print 'Accuracy score: {}'.format(accuracy_score(test_y, predicted))
-        print 'Recall score: {}'.format(recall_score(test_y, predicted,average=None))
-        print 'Precision score: {}'.format(precision_score(test_y, predicted, average=None))
+        for classifier in classifier_list:
+            print "\n____________{}____________".format(classifier.__class__.__name__)
 
-def initial_test_train_split(df):
-    '''
-    '''
-
-
+            #creating a model
+            classifier.fit(combine_train_X, train_y)
+            print 'done fitting'
+            predicted = classifier.predict(combine_test_X)
+            print 'done predicting'
+            confusion_matrix(test_y, predicted)
+            print confusion_matrix(test_y, predicted)
+            print 'Accuracy score: {}'.format(accuracy_score(test_y, predicted))
+            print 'Recall score: {}'.format(recall_score(test_y, predicted,average=None))
+            print 'Precision score: {}'.format(precision_score(test_y, predicted, average=None))
+            print 'Number of training data: {}'.format(combine_train_X.shape[0])
+            print 'Number of test data: {}'.format(combine_test_X.shape[0])
 
 if __name__ == '__main__':
 
@@ -167,9 +197,15 @@ if __name__ == '__main__':
     result = combined.merge(labels, left_on='artist', right_on=' artist', how='inner')
 
     #create a test-train split and never look at it again
+    X_train, X_test, y_train, y_test  = train_test_split(result, result['classes'],
+                                                            test_size=0.25,
+                                                            random_state=42)
+
 
     # #CROSS VALIDATION
-    cross_validation(result)
+    # cross_validation(X_train,[ MultinomialNB(), RandomForestClassifier(), GradientBoostingClassifier(), AdaBoostClassifier()])
+    cross_validation(X_train,[ MultinomialNB()])
+
 
     # with open('/data/naives_bayes.pkl', 'w') as f:
     #     cPickle.dump(model, f)
