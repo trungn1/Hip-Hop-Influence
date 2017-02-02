@@ -62,8 +62,6 @@ def combined_txt_file(file_list):
     clean['Top_7_word_freq'] = clean['full_lyrics'].apply(top_words)
 
     #add feature_3 - count of gangsta terms
-
-
     return clean
 
 def create_labeled_dataframe(txt_file):
@@ -88,6 +86,7 @@ def test_train_split(df, hold_out_per=.8):
     Input: A dataframe, and a percentage of songs to hold out
     Output: a
     '''
+    features = ['full_lyrics', 'Num_words', 'Top_7_word_freq']
     #get the max id
     max_id = max(df.artist_id.unique())
     # to hold out
@@ -96,11 +95,11 @@ def test_train_split(df, hold_out_per=.8):
     df['to_train'] = df['artist_id'].apply(lambda x: int(x) in to_hold_out).astype(int)
     #set a mask variable
     mask = df['to_train']== 1
-    train_X = df.ix[mask]['full_lyrics', 'Num_words', 'Top_7_word_freq']
-    train_y = df.ix[mask]['classes']
+    train_X = df.loc[mask, features]
+    train_y = df.loc[mask,'classes']
     #negate the mask to get the testing set
-    test_X = df.ix[~mask]['full_lyrics']
-    test_y = df.ix[~mask]['classes']
+    test_X = df.loc[~mask, features]
+    test_y = df.loc[~mask,'classes']
     return train_X, train_y, test_X, test_y
 
 def cross_validation(df, k=3):
@@ -108,26 +107,50 @@ def cross_validation(df, k=3):
     Input: A pandas dataframe, your X matrix
     Output: None, prints out score for the cross validations
     '''
+    # this loop is to do cross-fold validations
+    features = ['Num_words', 'Top_7_word_freq']
     for _ in range(k):
+
         # # do a tfidf transformer
         train_X, train_y, test_X, test_y = test_train_split(df)
 
         #vectorize only the lyrics
-        vectorizer = TfidfVectorizer(max_features=5000)
+        vectorizer = TfidfVectorizer(max_features=10000)
         train_vector = vectorizer.fit_transform(train_X['full_lyrics'])
-        test_vector = vectorizer.transform(test_X)
+        test_vector = vectorizer.transform(test_X['full_lyrics'])
 
-        #combining train vector and
+        #combining the train vector and feature_extractions
+        train = pd.DataFrame(train_vector.toarray())
+        test = pd.DataFrame(test_vector.toarray())
+
+        #reset index to match them all up
+        train.reset_index(inplace=True)
+        test.reset_index(inplace=True)
+        train_X.reset_index(inplace=True)
+        test_X.reset_index(inplace=True)
+                        # train_y.reset_index(inplace=True)
+                # test_y.reset_index(inplace=True)
+
+                #combining the tfidf with the features
+        combine_train_X = pd.merge(train, train_X[features], left_index=True, right_index=True, how='outer')
+        combine_test_X = pd.merge(test, test_X[features], left_index=True, right_index=True, how='outer')
+        combine_train_X = combine_train_X.drop('index', 1)
+        combine_test_X = combine_test_X.drop('index', 1)
 
         #creating a model
         model = MultinomialNB()
-        model.fit(train_vector, train_y)
-        predicted = model.predict(test_vector)
+        model.fit(combine_train_X, train_y)
+        predicted = model.predict(combine_test_X)
         confusion_matrix(test_y, predicted)
         print confusion_matrix(test_y, predicted)
         print 'Accuracy score: {}'.format(accuracy_score(test_y, predicted))
         print 'Recall score: {}'.format(recall_score(test_y, predicted,average=None))
         print 'Precision score: {}'.format(precision_score(test_y, predicted, average=None))
+
+def initial_test_train_split(df):
+    '''
+    '''
+
 
 
 if __name__ == '__main__':
@@ -142,23 +165,9 @@ if __name__ == '__main__':
 
     #create a new joined dataframe
     result = combined.merge(labels, left_on='artist', right_on=' artist', how='inner')
-    to_test = result[['artist_id', 'full_lyrics', 'classes']]
 
-    X = to_test['full_lyrics']
-    y = result['classes']
+    #create a test-train split and never look at it again
 
-    # do a toknizer with stemming
-    # # Use count_vectorizer to stem the words
-    # vectorizer = CountVectorizer(stem='PorterStemmer')
-    # song_vector
-    # #use TfidfTransformer
-    #
-    # count = CountVectorizer(max_features=5000, tokenizer=PorterStemmer)
-    # vect = count.fit_transform(X)
-    #
-    # tfidf = TfidfTransformer()
-    # transformed_data = tfidf.fit_transform(vect)
-    #
     # #CROSS VALIDATION
     cross_validation(result)
 
