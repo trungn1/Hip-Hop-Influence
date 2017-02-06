@@ -1,4 +1,4 @@
-﻿hip-hop, 100 Kila
+hip-hop, 100 Kila
 hip-hop, 100s
 hip-hop, 12 Gauge
 hip-hop, 2 Chainz
@@ -1693,7 +1693,6 @@ hip-hop, Suspekt
 hip-hop, Sweatshop Union
 hip-hop, Sweet Sensation
 hip-hop, Swollen Members
-hip-hop, 't Hof van Commerce
 hip-hop, Tag Team
 hip-hop, Task Force
 hip-hop, The Team
@@ -2180,7 +2179,7 @@ r-and-b, Brandy Norwood
 r-and-b, Les Nubians
 r-and-b, Nuttin' Nyce
 r-and-b, Nu Shooz
-r-and-b, 'N Sync
+r-and-b, N Sync
 r-and-b, N-Toon
 r-and-b, Nyusha
 r-and-b, George Nozuka

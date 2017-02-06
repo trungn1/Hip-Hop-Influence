@@ -1,7 +1,9 @@
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer, TfidfTransformer
 import pandas as pd
 import numpy as np
+from string import punctuation
 from collections import Counter
+import cPickle as pickle
 from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.stem.porter import PorterStemmer
 from nltk.stem.snowball import SnowballStemmer
@@ -10,6 +12,8 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
+output_files = ['output/output_1.txt','output/output_2.txt','output/output_3.txt','output/output_4.txt']
 
 def clean_lyrics(lyrics):
     '''
@@ -23,6 +27,15 @@ def clean_lyrics(lyrics):
     lyrics_split = [ps.stem(word.strip(punctuation)) for word in lyrics_split]
     joined_lyrics = ' '.join(lyrics_split)
     return joined_lyrics
+
+def word_set(lyrics):
+    '''
+    Input: Lyrics as a list of lines
+    Output: a set of unique words for that song
+    '''
+    lyrics_split = lyrics.lower().split()
+    lyrics_split = [word.strip(punctuation) for word in lyrics_split]
+    return set(lyrics_split)
 
 
 def top_words(lyrics, num=7):
@@ -42,20 +55,21 @@ def top_words(lyrics, num=7):
     freq_sum = sum([word[1] for word in highest_freq_words])
     return freq_sum
 
-def rating(lyrics):
+def ratings(lyrics):
     '''
-    Input: A stemmed lyrics
-    Return: Frequncy of wor
+    Input: Lyrics string that has been stemmed
+    Return: Frequncy of word
     '''
     check_word = set(['gun', 'bullet', 'murder', 'death', 'cop', 'popo', 'weed', 'cocaine', 'heroin', 'blunt', 'clip', 'punk',
-                    'snitch', 'brutality', 'methadone', 'amphetamines', 'ecstacy', 'marijuana', 'crack'])
+                    'snitch', 'brutality', 'methadone', 'amphetamines', 'ecstacy', 'marijuana', 'crack', 'gang', 'gangbang'])
     counter = Counter(lyrics.split())
-    counter_sum = float(sum(counter.values()))
-    frequency = 0
+    counter_sum = sum(counter.values())
+    counter_sum = max(1, counter_sum)
+    frequency = 0.000000001
     # looping through the set of word to check for and add their occurances
     for word in check_word:
         frequency += counter[word]
-    return frequency/counter_sum
+    return frequency/float(counter_sum)
 
 
 def combined_txt_file(file_list):
@@ -65,14 +79,19 @@ def combined_txt_file(file_list):
     '''
     combined = pd.DataFrame(columns=['artist', 'date_published','song_name','page','full_lyrics'])
     # loops through all the text files containing the lyrics
-    for txt_file in output_files:
+    for txt_file in file_list:
         temp_df = pd.read_csv(txt_file, delimiter=';;;', engine='python')
         combined = combined.append(temp_df)
     #account for data that has lyrics
     mask = ~ (combined['full_lyrics'].isnull())
-    clean  = combined.ix[mask]
-
+    clean = combined.ix[mask]
+    clean.reset_index(inplace=True)
+    clean = clean.drop('index', 1)
+    #stemming, lowering, and stripping punctuation from the lyrics
     clean['full_lyrics'] = clean['full_lyrics'].apply(clean_lyrics)
+
+    #stemming, lowering, and stripping punctuation from the lyrics
+    clean['word_set'] = clean['full_lyrics'].apply(word_set)
 
     #add feature_1 - number of unique words
     clean['Num_words'] = clean['full_lyrics'].apply(lambda x: len(set(x.lower().split())))
@@ -102,13 +121,14 @@ def _binary(string):
     else:
         return 3
 
-def _cross_val_split(df, hold_out_per=.8):
+def _cross_val_split(df, hold_out_per=.10):
     '''
     Input: A dataframe, and a percentage of songs to hold out
     Output: a
     '''
     #columns to return - if add additional features here
-    features = ['full_lyrics', 'Num_words', 'Top_7_word_freq', gangsta_rating]
+    features = ['full_lyrics', 'Num_words', 'Top_7_word_freq', 'gangsta_rating']
+
     #get the max id
     max_id = max(df.artist_id.unique())
     # to hold out
@@ -122,6 +142,7 @@ def _cross_val_split(df, hold_out_per=.8):
     #negate the mask to get the testing set
     test_X = df.loc[~mask, features]
     test_y = df.loc[~mask,'classes']
+    print hold_out_per
     return train_X, train_y, test_X, test_y
 
 def cross_validation(df, classifier_list, k=3):
@@ -131,65 +152,66 @@ def cross_validation(df, classifier_list, k=3):
     '''
     # this loop is to do cross-fold validations
     features = ['Num_words', 'Top_7_word_freq', 'gangsta_rating']
-    for _ in range(k):
+
+    for x in range(k):
         # # do a tfidf transformer
         #perfrom a test train split to cross validate
         train_X, train_y, test_X, test_y = _cross_val_split(df)
 
-        # #vectorize only the lyrics
-        # vectorizer = TfidfVectorizer(max_features=10000)
-        # train_vector = vectorizer.fit_transform(train_X['full_lyrics'])
-        # test_vector = vectorizer.transform(test_X['full_lyrics'])
+        #vectorize only the lyrics
+        vectorizer = TfidfVectorizer(max_features=5000)
+        train_vector = vectorizer.fit_transform(train_X['full_lyrics'])
+        test_vector = vectorizer.transform(test_X['full_lyrics'])
 
-        # #combining the train vector to array to add them together
-        # train = pd.DataFrame(train_vector.toarray())
-        # test = pd.DataFrame(test_vector.toarray())
+        #combining the train vector to array to add them together
+        train = pd.DataFrame(train_vector.toarray())
+        test = pd.DataFrame(test_vector.toarray())
 
 
         #tokenize the results
-        cv = CountVectorizer()
-        count_vector = cv.fit_transform(train_X['full_lyrics'])
-        test_vector = cv.transform(test_X['full_lyrics'])
-
-        train = pd.DataFrame(count_vector.toarray())
-        test = pd.DataFrame(test_vector.toarray())
+        # cv = CountVectorizer()
+        # count_vector = cv.fit_transform(train_X['full_lyrics'])
+        # test_vector = cv.transform(test_X['full_lyrics'])
+        #
+        # train = pd.DataFrame(count_vector.toarray())
+        # test = pd.DataFrame(test_vector.toarray())
 
 
         #
         # #reset index to match them all up
-        # train.reset_index(inplace=True)
-        # test.reset_index(inplace=True)
-        # train_X.reset_index(inplace=True)
-        # test_X.reset_index(inplace=True)
+        train.reset_index(inplace=True)
+        test.reset_index(inplace=True)
+        train_X.reset_index(inplace=True)
+        test_X.reset_index(inplace=True)
         #combining the tfidf with the features
         combine_train_X = pd.merge(train, train_X[features], left_index=True, right_index=True, how='outer')
         combine_test_X = pd.merge(test, test_X[features], left_index=True, right_index=True, how='outer')
         combine_train_X = combine_train_X.drop('index', 1)
         combine_test_X = combine_test_X.drop('index', 1)
-
+        print '____________________Iteration {}______________'.format(x)
         for classifier in classifier_list:
             print "\n____________{}____________".format(classifier.__class__.__name__)
-
             #creating a model
             classifier.fit(combine_train_X, train_y)
             print 'done fitting'
             predicted = classifier.predict(combine_test_X)
             print 'done predicting'
-            confusion_matrix(test_y, predicted)
             print confusion_matrix(test_y, predicted)
             print 'Accuracy score: {}'.format(accuracy_score(test_y, predicted))
             print 'Recall score: {}'.format(recall_score(test_y, predicted,average=None))
             print 'Precision score: {}'.format(precision_score(test_y, predicted, average=None))
+            print 'F1 score: {}'.format(f1_score(test_y, predicted, average=None))
             print 'Number of training data: {}'.format(combine_train_X.shape[0])
             print 'Number of test data: {}'.format(combine_test_X.shape[0])
 
 if __name__ == '__main__':
-
-    output_files = ['output/output_1.txt','output/output_2.txt','output/output_3.txt','output/output_4.txt']
-
     #creating the combined dataframe
-    combined = combined_txt_file(output_files)
-
+    # combined = combined_txt_file(output_files)
+    # # with open('combined.pkl', 'w') as f:
+    # #     pickle.dump(combined, f)
+    features = ['Num_words', 'Top_7_word_freq', 'gangsta_rating']
+    with open('combined.pkl', 'r') as f:
+        combined = pickle.load(f)
     #create the labels table
     labels = create_labeled_dataframe('artist_classification.txt')
 
@@ -200,12 +222,21 @@ if __name__ == '__main__':
     X_train, X_test, y_train, y_test  = train_test_split(result, result['classes'],
                                                             test_size=0.25,
                                                             random_state=42)
-
+    X_train = X_train.ix[:,features]
+    model = LogisticRegression(solver='newton-cg', multi_class='multinomial', C=0.001, max_iter=1000)
+    model.fit(X_train, y_train)
+    predicted = model.predict(X_train)
+    print confusion_matrix(y_train, predicted )
+    print 'Accuracy score: {}'.format(accuracy_score(y_train, predicted))
+    print 'Recall score: {}'.format(recall_score(y_train, predicted,average=None))
+    print 'Precision score: {}'.format(precision_score(y_train, predicted, average=None))
+    print 'F1 score: {}'.format(f1_score(y_train, predicted, average=None))
+    # with open('clean_date_data.pkl', 'r') as f:
+    #     final_data = pickle.load(f)
+    # #
+    # # train_X, train_y, test_X, test_y = _cross_val_split(final_data, .10)
 
     # #CROSS VALIDATION
     # cross_validation(X_train,[ MultinomialNB(), RandomForestClassifier(), GradientBoostingClassifier(), AdaBoostClassifier()])
-    cross_validation(X_train,[ MultinomialNB()])
-
-
-    # with open('/data/naives_bayes.pkl', 'w') as f:
-    #     cPickle.dump(model, f)
+    # cross_validation(X_train,[ MultinomialNB(alpha=0.01),
+                                # LogisticRegression(solver='sag', multi_class='multinomial')])

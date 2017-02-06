@@ -21,7 +21,7 @@ def get_artist_name(soup_obj):
     '''
     #try to account for pages that are not songs
     try:
-        artist = soup_obj.find_all('span', itemprop='title')[2].text
+        artist = soup_obj.find_all('span', {'itemprop':'title'})[2].text
     except IndexError:
         artist = 'None'
     return artist
