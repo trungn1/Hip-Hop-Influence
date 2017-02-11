@@ -1,5 +1,4 @@
 # Rapalytics
-<<<<<<< HEAD
 
 ## Motivation
 * Wanted to find out if rap song lyrics are distinct enough to determine which region the artist came from
