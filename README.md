@@ -22,4 +22,15 @@
 ## Results
 * With a multi-class classification, Multinomial Naive Bayes achieved **68%** Accuracy
 
+## Insights
+
+While, it may seem like East-Coast.
 ![Alt text](/images/alt_word_growth_by_region.png?raw=true "Unique Word Growth")
+
+Some interesting insight to be gained from this process is that the
+
+
+### Unique words in each Region
+* East-Coast:
+* West-Coast:
+* Dirty-South:

@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
+
 output_files = ['output/output_1.txt','output/output_2.txt','output/output_3.txt','output/output_4.txt']
 
 def clean_lyrics(lyrics):
@@ -37,6 +38,13 @@ def word_set(lyrics):
     lyrics_split = [word.strip(punctuation) for word in lyrics_split]
     return set(lyrics_split)
 
+def get_word_list(lyrics):
+    '''
+    Input: A string of lyrics
+    Output: A list of stemmed words
+    '''
+    word_list = lyrics.split()
+    return word_list
 
 def top_words(lyrics, num=7):
     '''
@@ -93,6 +101,9 @@ def combined_txt_file(file_list):
     #stemming, lowering, and stripping punctuation from the lyrics
     clean['word_set'] = clean['full_lyrics'].apply(word_set)
 
+    #get a list of all the word
+    clean['word_list'] = clean['full_lyrics'].apply(get_word_list)
+
     #add feature_1 - number of unique words
     clean['Num_words'] = clean['full_lyrics'].apply(lambda x: len(set(x.lower().split())))
 
@@ -145,6 +156,8 @@ def _cross_val_split(df, hold_out_per=.10):
     print hold_out_per
     return train_X, train_y, test_X, test_y
 
+
+
 def cross_validation(df, classifier_list, k=3):
     '''
     Input: A pandas dataframe, your X matrix
@@ -167,17 +180,6 @@ def cross_validation(df, classifier_list, k=3):
         train = pd.DataFrame(train_vector.toarray())
         test = pd.DataFrame(test_vector.toarray())
 
-
-        #tokenize the results
-        # cv = CountVectorizer()
-        # count_vector = cv.fit_transform(train_X['full_lyrics'])
-        # test_vector = cv.transform(test_X['full_lyrics'])
-        #
-        # train = pd.DataFrame(count_vector.toarray())
-        # test = pd.DataFrame(test_vector.toarray())
-
-
-        #
         # #reset index to match them all up
         train.reset_index(inplace=True)
         test.reset_index(inplace=True)
@@ -204,39 +206,30 @@ def cross_validation(df, classifier_list, k=3):
             print 'Number of training data: {}'.format(combine_train_X.shape[0])
             print 'Number of test data: {}'.format(combine_test_X.shape[0])
 
+
+
 if __name__ == '__main__':
-    #creating the combined dataframe
-    # combined = combined_txt_file(output_files)
-    # # with open('combined.pkl', 'w') as f:
-    # #     pickle.dump(combined, f)
     features = ['Num_words', 'Top_7_word_freq', 'gangsta_rating']
-    with open('combined.pkl', 'r') as f:
-        combined = pickle.load(f)
+
+    #creating the combined dataframe
+    combined = combined_txt_file(output_files)
+    with open('combined.pkl', 'w') as f:
+        pickle.dump(combined, f)
+
     #create the labels table
     labels = create_labeled_dataframe('artist_classification.txt')
 
     #create a new joined dataframe
     result = combined.merge(labels, left_on='artist', right_on=' artist', how='inner')
 
-    #create a test-train split and never look at it again
+    with open ('combined_with_label.pkl', 'r') as f:
+        result = pickle.load(f)
+
+    # #create a test-train split and never look at it again
     X_train, X_test, y_train, y_test  = train_test_split(result, result['classes'],
                                                             test_size=0.25,
-                                                            random_state=42)
-    X_train = X_train.ix[:,features]
-    model = LogisticRegression(solver='newton-cg', multi_class='multinomial', C=0.001, max_iter=1000)
-    model.fit(X_train, y_train)
-    predicted = model.predict(X_train)
-    print confusion_matrix(y_train, predicted )
-    print 'Accuracy score: {}'.format(accuracy_score(y_train, predicted))
-    print 'Recall score: {}'.format(recall_score(y_train, predicted,average=None))
-    print 'Precision score: {}'.format(precision_score(y_train, predicted, average=None))
-    print 'F1 score: {}'.format(f1_score(y_train, predicted, average=None))
-    # with open('clean_date_data.pkl', 'r') as f:
-    #     final_data = pickle.load(f)
-    # #
-    # # train_X, train_y, test_X, test_y = _cross_val_split(final_data, .10)
+                                                            random_state=100)
 
     # #CROSS VALIDATION
-    # cross_validation(X_train,[ MultinomialNB(), RandomForestClassifier(), GradientBoostingClassifier(), AdaBoostClassifier()])
-    # cross_validation(X_train,[ MultinomialNB(alpha=0.01),
-                                # LogisticRegression(solver='sag', multi_class='multinomial')])
+    cross_validation(X_train,[ MultinomialNB(), RandomForestClassifier(), GradientBoostingClassifier(),
+                    AdaBoostClassifier(), LogisticRegression(solver='sag', multi_class='multinomial')])

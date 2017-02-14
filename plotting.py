@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import pandas as pd
 
 def plot_artist(dataframe, col_name, criteria, name):
     '''
@@ -36,13 +37,14 @@ def plot_artist(dataframe, col_name, criteria, name):
 
 def top_words(df):
     '''
-    Input
+    Input:
+    Output:
     '''
 
     for index, row in combined_with_label.iterrows():
-        artist = combined_with_label.ix[index, 'classification']
-        words = combined_with_label.ix[index, 'word_set']
-        region_dict[artist].update(words)
+        level = combined_with_label.ix[index, 'classification']
+        words = combined_with_label.ix[index, 'word_list']
+        region_dict[level].update(words)
 
 
 def create_unique_word(df, criteria):
