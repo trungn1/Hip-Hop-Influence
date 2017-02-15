@@ -65,4 +65,4 @@ if __name__ == '__main__':
         pickle.dump(model, f)
 
     with open('/data/vectorizer.pkl', 'w') as f:
-        pickle.dump(model, f)
+        pickle.dump(vectorizer, f)
